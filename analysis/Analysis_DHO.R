@@ -8,6 +8,7 @@ library(lubridate)
 library(minpack.lm)
 library(nlstools)
 library(plotrix)
+library(ggplot2)
 
 ## Set the random number seed so that the bootstrap results remain contants
 set.seed(93834)
@@ -68,17 +69,6 @@ round(cbind(coef(nyfit1),coef(nyfit2),coef(nyfit3),coef(nyfit4),coef(nyfit5)),5)
 ## Bootstrap first fit
 nyboot1 <- nlsBoot(nyfit1)
 cbind(Est=coef(nyfit1),confint(nyboot1))
-
-## Bootstrap CIs for increments (used in Figure 3 plot below)
-nyLenPred <- apply(nyboot1$coefboot,MARGIN=1,FUN=vbT,t=1:5)
-nyLenMean <- apply(nyLenPred,MARGIN=1,FUN=mean)
-nyLenCI <- apply(nyLenPred,MARGIN=1,FUN=quantile,probs=c(0.025,0.975))
-nyIncPred <- apply(nyLenPred,MARGIN=2,FUN=diff)
-nyIncMean <- apply(nyIncPred,MARGIN=1,FUN=mean)
-nyIncCI <- apply(nyIncPred,MARGIN=1,FUN=quantile,probs=c(0.025,0.975))
-( nyPredictions <- data.frame(tl=nyLenMean[-5],tlCI=t(nyLenCI[,-5]),
-                              inc=nyIncMean,incCI=t(nyIncCI)) )
-
 
 
 
@@ -152,12 +142,9 @@ rm(tag1,tag2,tag3,tag4,tmp2,tmp3,tmp4,numrecaps)
 ##  This will predict the mean annual growth rate at two lengths ... L1 and L2
 ##  Along with the time of peak growth (w) and a level of seasonality (u)
 ### Choose two values for L1 and L2
-Ls1 <- c(100,150,75,175,125,200)
+Ls1 <- c(100,150,75)
 ### Create a function with the model in it
-vbFT <- function(Lm,T1,T2,L1,L2,g1,g2,w,u) {
-  phi <- function(Ti,u,w) u*sin(2*pi*(Ti-w))/(2*pi) 
-  ((L2*g1-L1*g2)/(g1-g2)-Lm)*(1-(1+(g1-g2)/(L1-L2))^((T2-T1)+(phi(T2,u,w)-phi(T1,u,w))))
-}
+vbFT <- vbFuns("Francis3")
 
 
 
@@ -169,7 +156,7 @@ vbFT <- function(Lm,T1,T2,L1,L2,g1,g2,w,u) {
 ## -----------------------------------------------------------------------------
 ## =============================================================================
 
-## Isolate LaPlatte data
+## Isolate Missisquoi data
 MISrecaps <- filterD(vtrecaps2,River=="Missisquoi")
 nrow(MISrecaps)
 
@@ -189,20 +176,20 @@ Summarize(~rtl,data=MISrecaps2)
 
 ### Fit the model with several starting values and different algs to test robustness
 MISstarts1 <- list(g1=35,g2=15,w=0.5,u=2)
-MISfit1 <- nls(dtl~vbFT(mtl,mDate12,rDate12,Ls1[1],Ls1[2],g1,g2,w,u),data=MISrecaps2,
+MISfit1 <- nls(dtl~vbFT(mtl,mDate12,rDate12,g1,g2,w,u,Ls1[1],Ls1[2]),data=MISrecaps2,
                start=MISstarts1,algorithm="port",
                lower=c(g1=0,g2=0,w=0,u=0),upper=c(g1=100,g2=100,w=1,u=10))
 residPlot(MISfit1)
 
 MISstarts2 <- list(g1=25,g2=20,w=0.25,u=1)
-MISfit2 <- nls(dtl~vbFT(mtl,mDate12,rDate12,Ls1[1],Ls1[2],g1,g2,w,u),data=MISrecaps2,
+MISfit2 <- nls(dtl~vbFT(mtl,mDate12,rDate12,g1,g2,w,u,Ls1[1],Ls1[2]),data=MISrecaps2,
                start=MISstarts2,algorithm="port",
                lower=c(g1=0,g2=0,w=0,u=0),upper=c(g1=100,g2=100,w=1,u=10))
 MISstarts3 <- list(g1=45,g2=10,w=0.75,u=1)
-MISfit3 <- nls(dtl~vbFT(mtl,mDate12,rDate12,Ls1[1],Ls1[2],g1,g2,w,u),data=MISrecaps2,
+MISfit3 <- nls(dtl~vbFT(mtl,mDate12,rDate12,g1,g2,w,u,Ls1[1],Ls1[2]),data=MISrecaps2,
                start=MISstarts3,algorithm="port",
                lower=c(g1=0,g2=0,w=0,u=0),upper=c(g1=100,g2=100,w=1,u=10))
-MISfit4 <- nlsLM(dtl~vbFT(mtl,mDate12,rDate12,Ls1[1],Ls1[2],g1,g2,w,u),data=MISrecaps2,
+MISfit4 <- nlsLM(dtl~vbFT(mtl,mDate12,rDate12,g1,g2,w,u,Ls1[1],Ls1[2]),data=MISrecaps2,
                  start=MISstarts1,algorithm="port",
                  lower=c(g1=0,g2=0,w=0,u=0),upper=c(g1=100,g2=100,w=1,u=10))
 ### See if the coefficients are similar ... THEY ARE!!!
@@ -214,37 +201,16 @@ MIScf1 <- coef(MISfit1)
 MISci1 <- confint(MISboot1)
 cbind(Est=MIScf1,MISci1)
 
-## Tet intervals for growth increments by using different Ls
-MISfit1a <- nls(dtl~vbFT(mtl,mDate12,rDate12,Ls1[3],Ls1[4],g1,g2,w,u),data=MISrecaps2,
-                start=MISstarts1,algorithm="port",
-                lower=c(g1=0,g2=0,w=0,u=0),upper=c(g1=100,g2=100,w=1,u=10))
-MISboot1a <- nlsBoot(MISfit1a)
-MIScf2 <- coef(MISfit1a)
-MISci2 <- confint(MISboot1a)
-
-MISfit1b <- nls(dtl~vbFT(mtl,mDate12,rDate12,Ls1[5],Ls1[6],g1,g2,w,u),data=MISrecaps2,
-                start=MISstarts1,algorithm="port",
-                lower=c(g1=0,g2=0,w=0,u=0),upper=c(g1=100,g2=100,w=1,u=10))
-MISboot1b <- nlsBoot(MISfit1b)
-MIScf3 <- coef(MISfit1b)
-MISci3 <- confint(MISboot1b)
-
-misPredictions <- data.frame(tl=Ls1,
-                             inc=c(MIScf1[c("g1","g2")],MIScf2[c("g1","g2")],
-                                   MIScf3[c("g1","g2")]),
-                             ci=rbind(MISci1[c("g1","g2"),],MISci2[c("g1","g2"),],
-                                      MISci3[c("g1","g2"),])) %>%
-  arrange(tl)
-
 #### These results appear highly variable, likely due to a small n. For example,
 #### the predicted growth rate for a 100 mm fish is from 24 to 40 mm, whereas
-#### the same for the LaPlatte R. is from 40 to 45 mm. Additionally, the 
-#### decline in predicted growth increaments suggests a Linf in the neighborhood
-#### of 300 mm, which seems too large. Finally, the growth incrments CIs overlap
-#### for, generally, three 25-mm length classes (where they don't at all for the
-#### LaPlatte R.). All-in-all, these data seem too weak to continue with. Also,
-#### I would not lump them with the LaPlatte R fish ... why weaken that good data
-#### with poorer data or fish that may (or may not) have a different growth pattern.
+#### the same for the LaPlatte R. is from 40 to 45 mm. Results not shown here,
+#### but previously calcuated ... the decline in predicted growth increaments
+#### suggests a Linf in the neighborhood of 300 mm, which seems too large.
+#### Finally, the growth incrments CIs overlap for, generally, three 25-mm
+#### length classes (where they don't at all for the LaPlatte R.). All-in-all,
+#### these data seem too weak to continue with. Also, I would not lump them with
+#### the LaPlatte R fish ... why weaken that good data with poorer data or fish
+#### that may (or may not) have a different growth pattern.
 
 
 
@@ -277,20 +243,20 @@ Summarize(~rtl,data=LPrecaps2)
 
 ### Fit the model with several starting values and different algs to test robustness
 LPstarts1 <- list(g1=35,g2=15,w=0.5,u=2)
-LPfit1 <- nls(dtl~vbFT(mtl,mDate12,rDate12,Ls1[1],Ls1[2],g1,g2,w,u),data=LPrecaps2,
+LPfit1 <- nls(dtl~vbFT(mtl,mDate12,rDate12,g1,g2,w,u,Ls1[1],Ls1[2]),data=LPrecaps2,
                 start=LPstarts1,algorithm="port",
                 lower=c(g1=0,g2=0,w=0,u=0),upper=c(g1=100,g2=100,w=1,u=10))
 residPlot(LPfit1)  # a little heteroscedastic
 
 LPstarts2 <- list(g1=25,g2=20,w=0.25,u=1)
-LPfit2 <- nls(dtl~vbFT(mtl,mDate12,rDate12,Ls1[1],Ls1[2],g1,g2,w,u),data=LPrecaps2,
+LPfit2 <- nls(dtl~vbFT(mtl,mDate12,rDate12,g1,g2,w,u,Ls1[1],Ls1[2]),data=LPrecaps2,
               start=LPstarts2,algorithm="port",
               lower=c(g1=0,g2=0,w=0,u=0),upper=c(g1=100,g2=100,w=1,u=10))
 LPstarts3 <- list(g1=45,g2=10,w=0.75,u=1)
-LPfit3 <- nls(dtl~vbFT(mtl,mDate12,rDate12,Ls1[1],Ls1[2],g1,g2,w,u),data=LPrecaps2,
+LPfit3 <- nls(dtl~vbFT(mtl,mDate12,rDate12,g1,g2,w,u,Ls1[1],Ls1[2]),data=LPrecaps2,
               start=LPstarts3,algorithm="port",
               lower=c(g1=0,g2=0,w=0,u=0),upper=c(g1=100,g2=100,w=1,u=10))
-LPfit4 <- nlsLM(dtl~vbFT(mtl,mDate12,rDate12,Ls1[1],Ls1[2],g1,g2,w,u),data=LPrecaps2,
+LPfit4 <- nlsLM(dtl~vbFT(mtl,mDate12,rDate12,g1,g2,w,u,Ls1[1],Ls1[2]),data=LPrecaps2,
                 start=LPstarts1,algorithm="port",
                 lower=c(g1=0,g2=0,w=0,u=0),upper=c(g1=100,g2=100,w=1,u=10))
 ### See if the coefficients are similar ... THEY ARE!!!
@@ -301,28 +267,6 @@ LPboot1 <- nlsBoot(LPfit1)
 LPcf1 <- coef(LPfit1)
 LPci1 <- confint(LPboot1)
 cbind(Est=LPcf1,LPci1)
-
-## Tet intervals for growth increments by using different Ls
-LPfit1a <- nls(dtl~vbFT(mtl,mDate12,rDate12,Ls1[3],Ls1[4],g1,g2,w,u),data=LPrecaps2,
-               start=LPstarts1,algorithm="port",
-               lower=c(g1=0,g2=0,w=0,u=0),upper=c(g1=100,g2=100,w=1,u=10))
-LPboot1a <- nlsBoot(LPfit1a)
-LPcf2 <- coef(LPfit1a)
-LPci2 <- confint(LPboot1a)
-
-LPfit1b <- nls(dtl~vbFT(mtl,mDate12,rDate12,Ls1[5],Ls1[6],g1,g2,w,u),data=LPrecaps2,
-               start=LPstarts1,algorithm="port",
-               lower=c(g1=0,g2=0,w=0,u=0),upper=c(g1=100,g2=100,w=1,u=10))
-LPboot1b <- nlsBoot(LPfit1b)
-LPcf3 <- coef(LPfit1b)
-LPci3 <- confint(LPboot1b)
-
-LPPredictions <- data.frame(tl=Ls1,
-                            inc=c(LPcf1[c("g1","g2")],LPcf2[c("g1","g2")],
-                                  LPcf3[c("g1","g2")]),
-                            ci=rbind(LPci1[c("g1","g2"),],LPci2[c("g1","g2"),],
-                                     LPci3[c("g1","g2"),])) %>%
-  arrange(tl)
 
 
 
@@ -346,12 +290,82 @@ nyLenCI <- apply(nyLenPred,MARGIN=1,FUN=quantile,probs=c(0.025,0.975))
 lines(x,nyLenCI["2.5%",],lty=2)
 lines(x,nyLenCI["97.5%",],lty=2)
 
+
 ### Histogram of times-at-large ... IN THE MANUSCRIPT (Figure 2)
 hist(~dt,data=LPrecaps2,w=14/365,xlim=c(0,2),ylim=c(0,30),
      xlab="Time-at-Large (years)",ylab="Frequency of Capture-Recapture Events")
 
 
-## Plot growth increment data across all populations ... IN THE MANUSCRIPT (Figure 3)
+### Length Frequency of all fish from LaPlatte R. (Figure 3)
+windows(6,6)
+LPraw <- filterD(vtraw,River=="LaPlatte") %>%
+  mutate(yr=factor(year(Date)),mon=month(Date,label=TRUE,abbr=FALSE))
+LPraw567 <- filterD(LPraw,mon %in% c("May","June","July"))
+
+p <- ggplot(LPraw567,aes(x=tl)) +
+  geom_histogram(position="identity",binwidth=3,
+                 fill="gray70",color="black") +
+  scale_y_continuous(name="Number of Stonecats",
+                     limits=c(0,27),expand=c(0,0),
+                     breaks=c(0,10,20)) +
+  scale_x_continuous(name="Total Length (mm)",
+                     limits=c(50,210)) +
+  facet_grid(mon~yr)
+p + theme_bw() +
+  theme(strip.text=element_text(face="bold",size=12),
+        axis.title=element_text(face="bold",size=15),
+        axis.text=element_text(size=12))
+
+
+## Plot growth increment data across all populations ... IN THE MANUSCRIPT (Figure 4)
+## Get predictions for LaPlatte R. Start with a length of 75 and 75 plus its
+##   growth increment. Continue like that for several ages
+LPfit1a <- nls(dtl~vbFT(mtl,mDate12,rDate12,g1,g2,w,u,75,146),data=LPrecaps2,
+               start=LPstarts1,algorithm="port",
+               lower=c(g1=0,g2=0,w=0,u=0),upper=c(g1=100,g2=100,w=1,u=10))
+LPboot1a <- nlsBoot(LPfit1a)
+LPcf1 <- cbind(TL=c(75,146),Est=coef(LPfit1a)[c("g1","g2")],
+               confint(LPboot1a)[c("g1","g2"),])
+
+LPfit1b <- nls(dtl~vbFT(mtl,mDate12,rDate12,g1,g2,w,u,117,165),data=LPrecaps2,
+               start=LPstarts1,algorithm="port",
+               lower=c(g1=0,g2=0,w=0,u=0),upper=c(g1=100,g2=100,w=1,u=10))
+LPboot1b <- nlsBoot(LPfit1b)
+LPcf2 <- cbind(TL=c(117,165),Est=coef(LPfit1b)[c("g1","g2")],
+               confint(LPboot1b)[c("g1","g2"),])
+
+LPfit1c <- nls(dtl~vbFT(mtl,mDate12,rDate12,g1,g2,w,u,100,178),data=LPrecaps2,
+               start=LPstarts1,algorithm="port",
+               lower=c(g1=0,g2=0,w=0,u=0),upper=c(g1=100,g2=100,w=1,u=10))
+LPboot1c <- nlsBoot(LPfit1c)
+LPcf3 <- cbind(TL=c(100,178),Est=coef(LPfit1c)[c("g1","g2")],
+               confint(LPboot1c)[c("g1","g2"),])["g2",,drop=FALSE]
+
+LPfit1d <- nls(dtl~vbFT(mtl,mDate12,rDate12,g1,g2,w,u,100,187),data=LPrecaps2,
+               start=LPstarts1,algorithm="port",
+               lower=c(g1=0,g2=0,w=0,u=0),upper=c(g1=100,g2=100,w=1,u=10))
+LPboot1d <- nlsBoot(LPfit1d)
+LPcf4 <- cbind(TL=c(100,187),Est=coef(LPfit1d)[c("g1","g2")],
+               confint(LPboot1d)[c("g1","g2"),])["g2",,drop=FALSE]
+
+LPPredictions <- data.frame(rbind(LPcf1,LPcf2,LPcf3,LPcf4)) %>%
+  arrange(TL) %>%
+  mutate(age=1:6)
+
+
+## Bootstrap CIs for increments (used in Figure 3 plot below)
+nyLenPred <- apply(nyboot1$coefboot,MARGIN=1,FUN=vbT,t=1:5)
+nyLenMean <- apply(nyLenPred,MARGIN=1,FUN=mean)
+nyLenCI <- apply(nyLenPred,MARGIN=1,FUN=quantile,probs=c(0.025,0.975))
+nyIncPred <- apply(nyLenPred,MARGIN=2,FUN=diff)
+nyIncMean <- apply(nyIncPred,MARGIN=1,FUN=mean)
+nyIncCI <- apply(nyIncPred,MARGIN=1,FUN=quantile,probs=c(0.025,0.975))
+( nyPredictions <- data.frame(age=1:5,tl=nyLenMean,tlCI=t(nyLenCI),
+                              inc=c(nyIncMean,NA),
+                              incCI=rbind(t(nyIncCI),c(NA,NA))) )
+
+
+
 ## Compute a SL to TL conversion from NY data
 lmSL2TL <- lm(tl~sl,data=nyFish)
 residPlot(lmSL2TL)  ## 3 possible outliers
@@ -386,14 +400,18 @@ Gilbert53le <- data.frame(age=1:9,
          inc=c(diff(mntl),NA))
 
 
-## Make the plot
+## Make the plot of growth increments vs initial length
 windows(6,5); par(mar=c(3,3,0.7,0.7),mgp=c(1.9,0.5,0),tcl=-0.2)
 plot(NULL,xlab="Initial Total Length (mm)",ylab="Annual Total Length Increment (mm)",
      xlim=c(-20,260),ylim=c(0,65))
-with(LPPredictions,plotCI(tl,inc,li=ci.95..LCI,ui=ci.95..UCI,add=TRUE,pch=19))
-lines(inc~tl,data=LPPredictions,col="black",lwd=2)
-arrows(53,48,LPPredictions$tl[1]-4,LPPredictions$inc[1]+1,length=0.1)
-text(57,48,"LaPalette R. (VT)",pos=2)
+abline(h=seq(0,60,5),col="gray90")
+abline(v=seq(50,250,25),col="gray90")
+#polygon(c(-20,-20,70,70),c(-2,65,65,-2),col="white",border=NA)
+with(LPPredictions,plotCI(TL,Est,li=X95..LCI,ui=X95..UCI,add=TRUE,pch=NA))
+lines(Est~TL,data=LPPredictions,col="black",lwd=2)
+points(Est~TL,data=LPPredictions[1,],col="black",pch=19)
+arrows(53,48,LPPredictions$TL[1]-4,LPPredictions$Est[1]+1,length=0.1)
+text(57,48,"LaPlatte R. (VT)",pos=2)
 with(nyPredictions,plotCI(tl,inc,li=tlCI.2.5.,ui=tlCI.97.5.,err="x",add=TRUE,col="gray40"))
 with(nyPredictions,plotCI(tl,inc,li=incCI.2.5.,ui=incCI.97.5.,add=TRUE,col="gray40",pch=19))
 lines(inc~tl,data=nyPredictions,col="gray40",lwd=2)
@@ -410,7 +428,27 @@ with(Gilbert53le,text(mntl[1],inc[1],"Lake Erie (OH)",pos=2))
 
 
 
+## Make the plot of total length vs. age
+windows(5,5); par(mar=c(3,3,0.7,0.7),mgp=c(1.9,0.5,0),tcl=-0.2,yaxs="i")
+plot(NULL,xlab="Age (years)",ylab="Total Length (mm)",
+     xlim=c(0.8,7.2),ylim=c(0,250))
+abline(h=seq(0,275,25),col="gray90")
+abline(v=seq(0,7,1),col="gray90")
+box()
+axis(1,seq(1,9,2))
+lines(TL~age,data=LPPredictions,col="black",lwd=3)
+lines(tl~age,data=nyPredictions,col="gray50",lwd=3)
+lines(bctl~age,data=Carlson66,lty=2,lwd=2)
+lines(bctl~age,data=Paruch79,lty=3,lwd=2)
+lines(mntl~age,data=Gilbert53s,lty=4,lwd=2)
+lines(mntl~age,data=Gilbert53le,lty=5,lwd=2)
 
+polygon(c(4.1,4.1,7.1,7.1),c(5,74.5,74.5,5),col="white",border=NA)
+legend("bottomright",c("LaPlatte R. (VT)","Great Chazy R. (NY)",
+                       "Vermillion R. (SD)","Wisconsin",
+                       "OH Streams","Lake Erie (OH)"),bty="n",
+       lwd=c(3,3,2,2,2,2),lty=c(1,1,2,3,4,5),
+       col=c("black","gray50","black","black","black","black"))
 
 
 ## Compute a TL to W conversion from NY data
