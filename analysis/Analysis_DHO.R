@@ -40,12 +40,20 @@ nyFish <- read_xlsx("data/NY.xlsx",sheet="Fish") %>%
 headtail(nyFish)
 
 ## Examine sample sizes by month of capture and annuli
-addmargins(xtabs(~mon+annuli,data=nyFish))
+addmargins(xtabs(~mon+annuli,data=nyFish))                     ### IN MANUSCRIPT
 ## Summarize lengths and weights
-Summarize(~tl,data=nyFish)
-Summarize(~wt,data=nyFish)
+Summarize(~tl,data=nyFish,digits=1)                            ### IN MANUSCRIPT
 ## Examine length frequency histogram ... WEIRD ... non-random sampling??
 hist(~tl,data=nyFish,w=10)
+
+
+## Compute a SL to TL conversion from NY data
+lmSL2TL <- lm(tl~sl,data=nyFish)
+residPlot(lmSL2TL)  ## 3 possible outliers
+fitPlot(lmSL2TL)
+round(coef(lmSL2TL),3)                                         ### IN MANUSCRIPT
+rSquared(lmSL2TL,digits=3)                                     ### IN MANUSCRIPT
+
 
 ## Fit traditional VBGF ... used several starting values, two algorithms to
 ##   make sure that the results were robust.
@@ -68,7 +76,7 @@ round(cbind(coef(nyfit1),coef(nyfit2),coef(nyfit3),coef(nyfit4),coef(nyfit5)),5)
 
 ## Bootstrap first fit
 nyboot1 <- nlsBoot(nyfit1)
-cbind(Est=coef(nyfit1),confint(nyboot1))
+round(cbind(Est=coef(nyfit1),confint(nyboot1)),2)              ### IN MANUSCRIPT
 
 
 
@@ -94,7 +102,7 @@ vtraw <- read_xlsx("data/VT.xlsx") %>%
   filterD(!tag %in% c("595F1(?)","595F1AE","65E7B32"))
 
 ## Total tagged by river
-length(unique(vtraw$tag[vtraw$River=="LaPlatte"]))   ### IN MANUSCRIPT
+length(unique(vtraw$tag[vtraw$River=="LaPlatte"]))             ### IN MANUSCRIPT
 length(unique(vtraw$tag[vtraw$River=="Missisquoi"]))
 
 ## Get a data.frame of just recaptured fish
@@ -113,7 +121,7 @@ vtrecaps %<>% mutate(event=unlist(apply(numrecaps,1,seq_len))) %>%
 ## Separate into recapture times ... Note that 1 is always marking, >1 is always
 ##   a recapture. If a fish is captured more than once, then >1 may be a marking
 ##   for a later recapture (i.e., event=2 can be a marking for event=3)
-xtabs(~River+event,data=vtrecaps)   ### In manuscrpt
+xtabs(~River+event,data=vtrecaps)                              ### IN MANUSCRIPT
 tag1 <- filterD(vtrecaps,event==1)
 tag2 <- filterD(vtrecaps,event==2)
 tag3 <- filterD(vtrecaps,event==3)
@@ -151,7 +159,7 @@ vbFT <- vbFuns("Francis3")
 ## =============================================================================
 ## -----------------------------------------------------------------------------
 ##
-## Missisquoi River (alone)
+## Missisquoi River (alone) ... NOT USED IN THE MANUSCRIPT SEE COMMENT AT END
 ##
 ## -----------------------------------------------------------------------------
 ## =============================================================================
@@ -223,7 +231,13 @@ cbind(Est=MIScf1,MISci1)
 ## -----------------------------------------------------------------------------
 ## =============================================================================
 
-## Isolate LaPlatte data
+## Isolate raw LaPlatte data
+LPraw <- filterD(vtraw,River=="LaPlatte") %>%
+  mutate(yr=factor(year(Date)),mon=month(Date,label=TRUE,abbr=FALSE))
+
+Summarize(~tl,data=LPraw,digits=1)                             ### IN MANUSCRIPT
+
+## Isolate recapture LaPlatte data
 LPrecaps <- filterD(vtrecaps2,River=="LaPlatte")
 nrow(LPrecaps)
 
@@ -234,12 +248,12 @@ LPrecaps2 <- filterD(LPrecaps,dt*365>7) %>%
   mutate(YAL=year(rDate)-year(mDate))
 nrow(LPrecaps2)
 ### Number of fish deleted
-nrow(LPrecaps)-nrow(LPrecaps2)
+nrow(LPrecaps)-nrow(LPrecaps2)                                 ### IN MANUSCRIPT
 ### Number of years between captures
-prop.table(xtabs(~YAL,data=LPrecaps2))*100
+round(prop.table(xtabs(~YAL,data=LPrecaps2))*100,0)            ### IN MANUSCRIPT
 ### Summarize lengths
-Summarize(~mtl,data=LPrecaps2)
-Summarize(~rtl,data=LPrecaps2)
+Summarize(~mtl,data=LPrecaps2,digits=1)                        ### IN MANUSCRIPT
+Summarize(~rtl,data=LPrecaps2,digits=1)                        ### IN MANUSCRIPT
 
 ### Fit the model with several starting values and different algs to test robustness
 LPstarts1 <- list(g1=35,g2=15,w=0.5,u=2)
@@ -266,7 +280,7 @@ round(cbind(coef(LPfit1),coef(LPfit2),coef(LPfit3),coef(LPfit4)),5)
 LPboot1 <- nlsBoot(LPfit1)
 LPcf1 <- coef(LPfit1)
 LPci1 <- confint(LPboot1)
-cbind(Est=LPcf1,LPci1)
+round(cbind(Est=LPcf1,LPci1),2)                                ### IN MANUSCRIPT
 
 
 
@@ -278,43 +292,77 @@ cbind(Est=LPcf1,LPci1)
 ## =============================================================================
 ################################################################################
 
+## Setup a theme
+theme_stonecat <- function (base_size=12,base_family="") {
+  theme_bw(base_size=base_size,base_family=base_family) +
+    theme(panel.grid.major=element_line(colour="gray90",linetype="dashed",size=0.25),
+          panel.grid.minor=element_line(colour="gray90",linetype="dashed",size=0.20),
+          panel.border = element_rect(color="black",size=0.3),
+          strip.background = element_rect(color="black",size=0.3),
+          strip.text=element_text(size=8,color="black"),
+          axis.text=element_text(size=8,color="black"),
+          axis.title=element_text(size=10,color="black"),
+          axis.title.x=element_text(margin=margin(t=3,r=0,b=0,l=0),color="black"),
+          axis.title.y=element_text(margin=margin(t=0,r=6,b=0,l=0),color="black"),
+          axis.line=element_line(size=0.3),
+          axis.ticks=element_line(size=0.3))
+}
+
+## Setup sizes
+singlewide <- 3.50
+doublewide <- 7.25
+maxheight <- 7.5
+
+
 ## Fitted Line Plot ... IN THE MANUSCRIPT (Figure 1)
-windows(5,5); par(mar=c(3,3,0.7,0.7),mgp=c(1.9,0.5,0),tcl=-0.2)
-plot(tl~age,data=nyFish,pch=19,col=col2rgbt("black",1/5),
-     xlim=c(0,6),ylim=c(0,200),
-     xlab="Adjusted Consensus Spine Age",ylab="Total Length (mm)")
-curve(vbT(x,coef(nyfit1)),from=0,to=6,add=TRUE)
-x <- seq(0,6,length.out=99)
-nyLenPred <- apply(nyboot1$coefboot,MARGIN=1,FUN=vbT,t=x)
-nyLenCI <- apply(nyLenPred,MARGIN=1,FUN=quantile,probs=c(0.025,0.975))
-lines(x,nyLenCI["2.5%",],lty=2)
-lines(x,nyLenCI["97.5%",],lty=2)
+x <- seq(0,6,length.out=999)
+nyLenPred <- predict(nyfit1,data.frame(age=x))
+nyLenCI <- apply(nyboot1$coefboot,MARGIN=1,FUN=vbT,t=x)
+nyLenCI <- apply(nyLenCI,MARGIN=1,FUN=quantile,probs=c(0.025,0.975))
+nyLenCI <- data.frame(x,nyLenPred,t(nyLenCI))
+names(nyLenCI) <- c("age","Est","LCI","UCI")
+
+flp <- ggplot(nyFish,aes(x=age,y=tl)) +
+  geom_point(alpha=1/5) +
+  scale_x_continuous(name="Age (years)",limits=c(0,6),expand=c(0,0)) +
+  scale_y_continuous(name="Total Length (mm)",limits=c(0,200),expand=c(0,0)) +
+  geom_line(data=nyLenCI,aes(x=age,y=Est)) +
+  geom_line(data=nyLenCI,aes(x=age,y=LCI),linetype="dashed") +
+  geom_line(data=nyLenCI,aes(x=age,y=UCI),linetype="dashed")
+flp + theme_stonecat()
+ggsave("doc/figures/Figure1.TIFF",width=singlewide,height=singlewide)
 
 
-### Histogram of times-at-large ... IN THE MANUSCRIPT (Figure 2)
-hist(~dt,data=LPrecaps2,w=14/365,xlim=c(0,2),ylim=c(0,30),
-     xlab="Time-at-Large (years)",ylab="Frequency of Capture-Recapture Events")
-
-
-### Length Frequency of all fish from LaPlatte R. (Figure 3)
-windows(6,6)
+### Length Frequency of all fish from LaPlatte R. (Figure 2)
 LPraw <- filterD(vtraw,River=="LaPlatte") %>%
   mutate(yr=factor(year(Date)),mon=month(Date,label=TRUE,abbr=FALSE))
-LPraw567 <- filterD(LPraw,mon %in% c("May","June","July"))
+LPraw56789 <- filterD(LPraw,mon %in% c("May","June","July","August","September"))
 
-p <- ggplot(LPraw567,aes(x=tl)) +
-  geom_histogram(position="identity",binwidth=3,
-                 fill="gray70",color="black") +
-  scale_y_continuous(name="Number of Stonecats",
-                     limits=c(0,27),expand=c(0,0),
-                     breaks=c(0,10,20)) +
+lf <- ggplot(LPraw56789,aes(x=tl)) +
+  geom_histogram(position="identity",binwidth=5,
+                 fill="gray70",color="black",size=0.2) +
   scale_x_continuous(name="Total Length (mm)",
                      limits=c(50,210)) +
+  scale_y_continuous(name="Number of Stonecats",
+                     limits=c(0,40),expand=c(0,0),
+                     breaks=seq(0,37,10)) +
   facet_grid(mon~yr)
-p + theme_bw() +
-  theme(strip.text=element_text(face="bold",size=12),
-        axis.title=element_text(face="bold",size=15),
-        axis.text=element_text(size=12))
+lf + theme_stonecat()
+ggsave("doc/figures/Figure2.TIFF",width=doublewide,height=maxheight)
+
+
+
+### Histogram of times-at-large ... IN THE MANUSCRIPT (Figure 3)
+tal <- ggplot(LPrecaps2,aes(x=dt)) +
+  geom_histogram(position="identity",binwidth=14/365,
+                 fill="gray70",color="black",size=0.2) +
+  scale_x_continuous(name="Time-at-Large (years)",
+                     limits=c(0,2.05),expand=c(0,0)) +
+  scale_y_continuous(name="Capture-Recapture Event Frequency",
+                     limits=c(0,25),expand=c(0,0))
+tal + theme_stonecat()
+ggsave("doc/figures/Figure3.TIFF",width=singlewide,height=singlewide)
+
 
 
 ## Plot growth increment data across all populations ... IN THE MANUSCRIPT (Figure 4)
@@ -348,114 +396,70 @@ LPboot1d <- nlsBoot(LPfit1d)
 LPcf4 <- cbind(TL=c(100,187),Est=coef(LPfit1d)[c("g1","g2")],
                confint(LPboot1d)[c("g1","g2"),])["g2",,drop=FALSE]
 
-LPPredictions <- data.frame(rbind(LPcf1,LPcf2,LPcf3,LPcf4)) %>%
-  arrange(TL) %>%
-  mutate(age=1:6)
+( LPPredictions <- data.frame(rbind(LPcf1,LPcf2,LPcf3,LPcf4)) %>%
+    arrange(TL) %>%
+    mutate(age=1:6,loc="LaPlatte R. (VT)") )
 
-
-## Bootstrap CIs for increments (used in Figure 3 plot below)
+## Bootstrap CIs for increments
 nyLenPred <- apply(nyboot1$coefboot,MARGIN=1,FUN=vbT,t=1:5)
 nyLenMean <- apply(nyLenPred,MARGIN=1,FUN=mean)
 nyLenCI <- apply(nyLenPred,MARGIN=1,FUN=quantile,probs=c(0.025,0.975))
 nyIncPred <- apply(nyLenPred,MARGIN=2,FUN=diff)
 nyIncMean <- apply(nyIncPred,MARGIN=1,FUN=mean)
 nyIncCI <- apply(nyIncPred,MARGIN=1,FUN=quantile,probs=c(0.025,0.975))
-( nyPredictions <- data.frame(age=1:5,tl=nyLenMean,tlCI=t(nyLenCI),
+( nyPredictions <- data.frame(age=1:5,TL=nyLenMean,tlCI=t(nyLenCI),
                               inc=c(nyIncMean,NA),
-                              incCI=rbind(t(nyIncCI),c(NA,NA))) )
-
-
-
-## Compute a SL to TL conversion from NY data
-lmSL2TL <- lm(tl~sl,data=nyFish)
-residPlot(lmSL2TL)  ## 3 possible outliers
-fitPlot(lmSL2TL)
-coef(lmSL2TL)
-rSquared(lmSL2TL)
+                              incCI=rbind(t(nyIncCI),c(NA,NA)),
+                              loc="Great Chazy R. (NY)") )
 
 ## Results from historical studies
 ## Carlson (1966) Lake Vermillion, SD ... Total Length at formation, vertebrae
 Carlson66 <- data.frame(age=1:7,
                         n=c(4,6,22,6,2,6,1),
                         mntl=c(78.5,96.8,113.8,137.6,155.0,175.6,193.0),
-                        bctl=c(68.8,99.7,117.0,136.9,157.8,171.5,179.8)) %>%
-  mutate(inc=c(diff(mntl),NA),incbc=c(diff(bctl),NA))
+                        bctl=c(68.8,99.7,117.0,136.9,157.8,171.5,179.8),
+                        loc="Vermillion R. (SD)") %>%
+  mutate(inc=c(diff(mntl),NA),incbc=c(diff(bctl),NA),TL=bctl)
 ## Paruch (1979) Wisconsin ... Total Length at capture, pectoral spines
 Paruch79 <- data.frame(age=0:5,
                         n=c(27,20,19,5,1,2),
                         mntl=c(46,102,148,159,199,187),
-                        bctl=c(NA,51,95,124,152,162)) %>%
-  mutate(inc=c(diff(mntl),NA),incbc=c(diff(bctl),NA))
+                        bctl=c(NA,51,95,124,152,162),
+                       loc="Wisconsin") %>%
+  mutate(inc=c(diff(mntl),NA),incbc=c(diff(bctl),NA),TL=bctl)
 ## Gilbert (1953) Streams ... Standard Length, vertebrae
 Gilbert53s <- data.frame(age=1:6,
                          n=NA,
-                         mnsl=c(54,73,89,104,116,129)) %>%
-  mutate(mntl=predict(lmSL2TL,data.frame(sl=mnsl)),
-         inc=c(diff(mntl),NA))
+                         mnsl=c(54,73,89,104,116,129),
+                         loc="Ohio streams") %>%
+  mutate(TL=predict(lmSL2TL,data.frame(sl=mnsl)),
+         inc=c(diff(TL),NA))
 ## Gilbert (1953) Lake Erie ... Standard Length, vertebrae
 Gilbert53le <- data.frame(age=1:9,
                           n=NA,
-                          mnsl=c(68,121,162,181,195,203,208,224,237)) %>%
-  mutate(mntl=predict(lmSL2TL,data.frame(sl=mnsl)),
-         inc=c(diff(mntl),NA))
+                          mnsl=c(68,121,162,181,195,203,208,224,237),
+                          loc="Lake Erie (OH)") %>%
+  mutate(TL=predict(lmSL2TL,data.frame(sl=mnsl)),
+         inc=c(diff(TL),NA))
 
 
-## Make the plot of growth increments vs initial length
-windows(6,5); par(mar=c(3,3,0.7,0.7),mgp=c(1.9,0.5,0),tcl=-0.2)
-plot(NULL,xlab="Initial Total Length (mm)",ylab="Annual Total Length Increment (mm)",
-     xlim=c(-20,260),ylim=c(0,65))
-abline(h=seq(0,60,5),col="gray90")
-abline(v=seq(50,250,25),col="gray90")
-#polygon(c(-20,-20,70,70),c(-2,65,65,-2),col="white",border=NA)
-with(LPPredictions,plotCI(TL,Est,li=X95..LCI,ui=X95..UCI,add=TRUE,pch=NA))
-lines(Est~TL,data=LPPredictions,col="black",lwd=2)
-points(Est~TL,data=LPPredictions[1,],col="black",pch=19)
-arrows(53,48,LPPredictions$TL[1]-4,LPPredictions$Est[1]+1,length=0.1)
-text(57,48,"LaPlatte R. (VT)",pos=2)
-with(nyPredictions,plotCI(tl,inc,li=tlCI.2.5.,ui=tlCI.97.5.,err="x",add=TRUE,col="gray40"))
-with(nyPredictions,plotCI(tl,inc,li=incCI.2.5.,ui=incCI.97.5.,add=TRUE,col="gray40",pch=19))
-lines(inc~tl,data=nyPredictions,col="gray40",lwd=2)
-arrows(66,53,nyPredictions$tl[1]-4,nyPredictions$inc[1]+1,length=0.1)
-text(70,53,"Great Chazy R. (NY)",pos=2)
-lines(incbc~bctl,data=Carlson66,lty=2)
-with(Carlson66,text(bctl[1],incbc[1],"Vermillion R. (SD)",pos=2))
-lines(incbc~bctl,data=Paruch79,lty=2)
-with(Paruch79,text(bctl[2],incbc[2],"Wisconsin",pos=2))
-lines(inc~mntl,data=Gilbert53s,lty=2)
-with(Gilbert53s,text(mntl[1],inc[1],"OH Streams",pos=2))
-lines(inc~mntl,data=Gilbert53le,lty=2)
-with(Gilbert53le,text(mntl[1],inc[1],"Lake Erie (OH)",pos=2))
+vars <- c("age","TL","loc")
+predGrowth <- rbind(LPPredictions[,vars],nyPredictions[,vars],Carlson66[,vars],
+                      Paruch79[,vars],Gilbert53s[,vars],Gilbert53le[,vars])
+predGrowth$loc <- ordered(predGrowth$loc,levels=c("LaPlatte R. (VT)","Great Chazy R. (NY)","Lake Erie (OH)","Wisconsin","Vermillion R. (SD)","Ohio streams"))
+
+PG <- ggplot(data=predGrowth,aes(x=age,y=TL,group=loc)) +
+  geom_line(aes(linetype=loc),size=0.5) +
+  scale_linetype_manual(values=c("solid","longdash","dotted","dashed","dotdash","twodash")) +
+  scale_x_continuous(name="Age (years)",
+                     limits=c(1,7),breaks=seq(1,7,1)) +
+  scale_y_continuous(name="Total Length (mm)",
+                     limits=c(0,250),expand=c(0,0))
+PG + theme_stonecat() + theme(legend.position=c(.725,.15),
+                              legend.key.height=unit(0.5,"lines"),
+                              legend.key.width=unit(1.9,"lines"),
+                              legend.title=element_blank(),
+                              legend.text=element_text(size=8))
+ggsave("doc/figures/Figure4.TIFF",width=singlewide,height=singlewide)
 
 
-
-## Make the plot of total length vs. age
-windows(5,5); par(mar=c(3,3,0.7,0.7),mgp=c(1.9,0.5,0),tcl=-0.2,yaxs="i")
-plot(NULL,xlab="Age (years)",ylab="Total Length (mm)",
-     xlim=c(0.8,7.2),ylim=c(0,250))
-abline(h=seq(0,275,25),col="gray90")
-abline(v=seq(0,7,1),col="gray90")
-box()
-axis(1,seq(1,9,2))
-lines(TL~age,data=LPPredictions,col="black",lwd=3)
-lines(tl~age,data=nyPredictions,col="gray50",lwd=3)
-lines(bctl~age,data=Carlson66,lty=2,lwd=2)
-lines(bctl~age,data=Paruch79,lty=3,lwd=2)
-lines(mntl~age,data=Gilbert53s,lty=4,lwd=2)
-lines(mntl~age,data=Gilbert53le,lty=5,lwd=2)
-
-polygon(c(4.1,4.1,7.1,7.1),c(5,74.5,74.5,5),col="white",border=NA)
-legend("bottomright",c("LaPlatte R. (VT)","Great Chazy R. (NY)",
-                       "Vermillion R. (SD)","Wisconsin",
-                       "OH Streams","Lake Erie (OH)"),bty="n",
-       lwd=c(3,3,2,2,2,2),lty=c(1,1,2,3,4,5),
-       col=c("black","gray50","black","black","black","black"))
-
-
-## Compute a TL to W conversion from NY data
-nyFish1 <- mutate(nyFish,logw=log(wt),logtl=log(tl))
-nyFish1 <- nyFish1[-c(66,172),] # 2 big outliers
-lmTL2W <- lm(logw~logtl,data=nyFish1)
-residPlot(lmTL2W)
-fitPlot(lmTL2W)
-### Curved, likely due to different years and times of year
-### DON'T USE
