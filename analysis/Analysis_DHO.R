@@ -23,20 +23,23 @@ set.seed(93834)
 
 ## Load NY data and reduce to just those variables of interest
 ## Note that the observed annuli were modified to create fractional ages based
-##   on a presumed growing season from June 1st to November 1st.
+##   on a presumed growing season from June 1st (152) to November 1st (305).
+gstart <- 152 ## June 1st
+gend <- 305   ## Nov 1st
 
 nyAges <- read_xlsx("data/NY.xlsx",sheet="Ages")
 nyFish <- read_xlsx("data/NY.xlsx",sheet="Fish") %>%
   rename(date=`Date collected`,tl=`Total Length`,
          sl=`Standard Length`,wt=`Weight`) %>%
   mutate(mon=month(date,label=TRUE),yr=year(date),day=yday(date)) %>%
+  mutate(tl2=tl/(1-0.024)) %>%  # 2.4% freezing effect on TL (avg from in Ogle)
   select(-Location,-Sex,-`Excised Date`,-date) %>%
   left_join(nyAges[,c("ID","FinalAge")],by="ID") %>%
   rename(annuli=FinalAge) %>%
   mutate(age= case_when(
-    day<152 ~ annuli,                        # Before June 1st
-    day<305 ~ annuli + (day-152)/(305-152),  # Btwn June 1st and Nov 1st
-    TRUE ~ annuli+1))                        # After Nov 1st
+    day<gstart ~ annuli,                             # Before gstart
+    day<gend ~ annuli + (day-gstart)/(gend-gstart),  # Btwn gstart and gend
+    TRUE ~ annuli+1))                                # After gend
 headtail(nyFish)
 
 ## Examine sample sizes by month of capture and annuli
@@ -73,6 +76,8 @@ nyfit4 <- nls(tl~vbT(age,Linf,K,t0),data=nyFish,start=nystarts1)
 nyfit5 <- nlsLM(tl~vbT(age,Linf,K,t0),data=nyFish,start=nystarts1)
 ### See if the coefficients are similar ... THEY ARE!!!
 round(cbind(coef(nyfit1),coef(nyfit2),coef(nyfit3),coef(nyfit4),coef(nyfit5)),5)
+### Simple prediction ... used when testing robustness of seasonal dates
+predict(nyfit1,data.frame(age=2:4))
 
 ## Bootstrap first fit
 nyboot1 <- nlsBoot(nyfit1)
@@ -314,7 +319,38 @@ doublewide <- 7.25
 maxheight <- 7.5
 
 
-## Fitted Line Plot ... IN THE MANUSCRIPT (Figure 1)
+### Length Frequency of all fish from LaPlatte R. (Figure 1)
+LPraw <- filterD(vtraw,River=="LaPlatte") %>%
+  mutate(yr=factor(year(Date)),mon=month(Date,label=TRUE,abbr=FALSE))
+LPraw56789 <- filterD(LPraw,mon %in% c("May","June","July","August","September"))
+
+lf <- ggplot(LPraw56789,aes(x=tl)) +
+  geom_histogram(position="identity",binwidth=5,
+                 fill="gray70",color="black",size=0.2) +
+  scale_x_continuous(name="Total length (mm)",
+                     limits=c(50,210)) +
+  scale_y_continuous(name="Number of stonecats",
+                     limits=c(0,40),expand=c(0,0),
+                     breaks=seq(0,37,10)) +
+  facet_grid(mon~yr)
+lf + theme_stonecat()
+ggsave("doc/figures/Figure1.TIFF",width=doublewide,height=maxheight)
+
+
+
+### Histogram of times-at-large ... IN THE MANUSCRIPT (Figure 2)
+tal <- ggplot(LPrecaps2,aes(x=dt)) +
+  geom_histogram(position="identity",binwidth=14/365,
+                 fill="gray70",color="black",size=0.2) +
+  scale_x_continuous(name="Time-at-large (years)",
+                     limits=c(0,2.05),expand=c(0,0)) +
+  scale_y_continuous(name="Capture-recapture event frequency",
+                     limits=c(0,25),expand=c(0,0))
+tal + theme_stonecat()
+ggsave("doc/figures/Figure2.TIFF",width=singlewide,height=singlewide)
+
+
+## Fitted Line Plot ... IN THE MANUSCRIPT (Figure 3)
 x <- seq(0,6,length.out=999)
 nyLenPred <- predict(nyfit1,data.frame(age=x))
 nyLenCI <- apply(nyboot1$coefboot,MARGIN=1,FUN=vbT,t=x)
@@ -325,42 +361,11 @@ names(nyLenCI) <- c("age","Est","LCI","UCI")
 flp <- ggplot(nyFish,aes(x=age,y=tl)) +
   geom_point(alpha=1/5) +
   scale_x_continuous(name="Age (years)",limits=c(0,6),expand=c(0,0)) +
-  scale_y_continuous(name="Total Length (mm)",limits=c(0,200),expand=c(0,0)) +
+  scale_y_continuous(name="Total length (mm)",limits=c(0,200),expand=c(0,0)) +
   geom_line(data=nyLenCI,aes(x=age,y=Est)) +
   geom_line(data=nyLenCI,aes(x=age,y=LCI),linetype="dashed") +
   geom_line(data=nyLenCI,aes(x=age,y=UCI),linetype="dashed")
 flp + theme_stonecat()
-ggsave("doc/figures/Figure1.TIFF",width=singlewide,height=singlewide)
-
-
-### Length Frequency of all fish from LaPlatte R. (Figure 2)
-LPraw <- filterD(vtraw,River=="LaPlatte") %>%
-  mutate(yr=factor(year(Date)),mon=month(Date,label=TRUE,abbr=FALSE))
-LPraw56789 <- filterD(LPraw,mon %in% c("May","June","July","August","September"))
-
-lf <- ggplot(LPraw56789,aes(x=tl)) +
-  geom_histogram(position="identity",binwidth=5,
-                 fill="gray70",color="black",size=0.2) +
-  scale_x_continuous(name="Total Length (mm)",
-                     limits=c(50,210)) +
-  scale_y_continuous(name="Number of Stonecats",
-                     limits=c(0,40),expand=c(0,0),
-                     breaks=seq(0,37,10)) +
-  facet_grid(mon~yr)
-lf + theme_stonecat()
-ggsave("doc/figures/Figure2.TIFF",width=doublewide,height=maxheight)
-
-
-
-### Histogram of times-at-large ... IN THE MANUSCRIPT (Figure 3)
-tal <- ggplot(LPrecaps2,aes(x=dt)) +
-  geom_histogram(position="identity",binwidth=14/365,
-                 fill="gray70",color="black",size=0.2) +
-  scale_x_continuous(name="Time-at-Large (years)",
-                     limits=c(0,2.05),expand=c(0,0)) +
-  scale_y_continuous(name="Capture-Recapture Event Frequency",
-                     limits=c(0,25),expand=c(0,0))
-tal + theme_stonecat()
 ggsave("doc/figures/Figure3.TIFF",width=singlewide,height=singlewide)
 
 
@@ -453,7 +458,7 @@ PG <- ggplot(data=predGrowth,aes(x=age,y=TL,group=loc)) +
   scale_linetype_manual(values=c("solid","longdash","dotted","dashed","dotdash","twodash")) +
   scale_x_continuous(name="Age (years)",
                      limits=c(1,7),breaks=seq(1,7,1)) +
-  scale_y_continuous(name="Total Length (mm)",
+  scale_y_continuous(name="Total length (mm)",
                      limits=c(0,250),expand=c(0,0))
 PG + theme_stonecat() + theme(legend.position=c(.725,.15),
                               legend.key.height=unit(0.5,"lines"),
@@ -461,5 +466,3 @@ PG + theme_stonecat() + theme(legend.position=c(.725,.15),
                               legend.title=element_blank(),
                               legend.text=element_text(size=8))
 ggsave("doc/figures/Figure4.TIFF",width=singlewide,height=singlewide)
-
-
