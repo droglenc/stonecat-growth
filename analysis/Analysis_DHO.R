@@ -10,7 +10,7 @@ library(nlstools)
 library(plotrix)
 library(ggplot2)
 
-## Set the random number seed so that the bootstrap results remain contants
+## Set the random number seed so that the bootstrap results remain constant
 set.seed(93834)
 
 ################################################################################
@@ -20,6 +20,9 @@ set.seed(93834)
 ##
 ## =============================================================================
 ################################################################################
+
+## Mean shrinkage factors from Ogle (2009), Haubrock et al. (2018), 
+( shrnkg <- mean(c(0.0288,0.037,0.016,0.0236, 0.0401,0.007,0.015,0.034)) )
 
 ## Load NY data and reduce to just those variables of interest
 ## Note that the observed annuli were modified to create fractional ages based
@@ -32,7 +35,7 @@ nyFish <- read_xlsx("data/NY.xlsx",sheet="Fish") %>%
   rename(date=`Date collected`,tl=`Total Length`,
          sl=`Standard Length`,wt=`Weight`) %>%
   mutate(mon=month(date,label=TRUE),yr=year(date),day=yday(date)) %>%
-  mutate(tl2=tl/(1-0.024)) %>%  # 2.4% freezing effect on TL (avg from in Ogle)
+  mutate(tlcorr=tl/(1-shrnkg)) %>%  # freezing effect on TL (avg from in Ogle)
   select(-Location,-Sex,-`Excised Date`,-date) %>%
   left_join(nyAges[,c("ID","FinalAge")],by="ID") %>%
   rename(annuli=FinalAge) %>%
@@ -50,7 +53,8 @@ Summarize(~tl,data=nyFish,digits=1)                            ### IN MANUSCRIPT
 hist(~tl,data=nyFish,w=10)
 
 
-## Compute a SL to TL conversion from NY data
+## Compute a SL to TL conversion from NY data (assumes shrinkage due to 
+##   freezing is the same for both SL and TL)
 lmSL2TL <- lm(tl~sl,data=nyFish)
 residPlot(lmSL2TL)  ## 3 possible outliers
 fitPlot(lmSL2TL)
@@ -58,22 +62,22 @@ round(coef(lmSL2TL),3)                                         ### IN MANUSCRIPT
 rSquared(lmSL2TL,digits=3)                                     ### IN MANUSCRIPT
 
 
-## Fit traditional VBGF ... used several starting values, two algorithms to
-##   make sure that the results were robust.
+## Fit traditional VBGF using corrected TL ... used several starting values, two
+##   algorithms to make sure that the results were robust.
 vbT <- vbFuns()
-( nystarts1 <- vbStarts(tl~age,data=nyFish) )
-nyfit1 <- nls(tl~vbT(age,Linf,K,t0),data=nyFish,start=nystarts1,algorithm="port")
+( nystarts1 <- vbStarts(tlcorr~age,data=nyFish) )
+nyfit1 <- nls(tlcorr~vbT(age,Linf,K,t0),data=nyFish,start=nystarts1,algorithm="port")
 fitPlot(nyfit1,col.pt=col2rgbt("black",1/10),col.mdl="black")
 residPlot(nyfit1)
 
 ### try different starting values, same algorithm
 nystarts2 <- list(Linf=200,K=0.1,t0=0)
-nyfit2 <- nls(tl~vbT(age,Linf,K,t0),data=nyFish,start=nystarts2,algorithm="port")
+nyfit2 <- nls(tlcorr~vbT(age,Linf,K,t0),data=nyFish,start=nystarts2,algorithm="port")
 nystarts3 <- list(Linf=100,K=0.1,t0=-0.5)
-nyfit3 <- nls(tl~vbT(age,Linf,K,t0),data=nyFish,start=nystarts3,algorithm="port")
+nyfit3 <- nls(tlcorr~vbT(age,Linf,K,t0),data=nyFish,start=nystarts3,algorithm="port")
 ### try different algorithms, same starting values
-nyfit4 <- nls(tl~vbT(age,Linf,K,t0),data=nyFish,start=nystarts1)
-nyfit5 <- nlsLM(tl~vbT(age,Linf,K,t0),data=nyFish,start=nystarts1)
+nyfit4 <- nls(tlcorr~vbT(age,Linf,K,t0),data=nyFish,start=nystarts1)
+nyfit5 <- nlsLM(tlcorr~vbT(age,Linf,K,t0),data=nyFish,start=nystarts1)
 ### See if the coefficients are similar ... THEY ARE!!!
 round(cbind(coef(nyfit1),coef(nyfit2),coef(nyfit3),coef(nyfit4),coef(nyfit5)),5)
 ### Simple prediction ... used when testing robustness of seasonal dates
